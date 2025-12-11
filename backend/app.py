@@ -2,6 +2,8 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import sys
 import os
+from datetime import datetime, date
+from decimal import Decimal
 from dotenv import load_dotenv
 
 # Add parent directory to path to import existing modules
@@ -98,6 +100,21 @@ def generate_sql():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+def serialize_value(value):
+    """Convert MySQL types to JSON-serializable types"""
+    if value is None:
+        return None
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, bytes):
+        return value.decode('utf-8', errors='replace')
+    if isinstance(value, (int, float, str, bool)):
+        return value
+    return str(value)
+
+
 @app.route('/api/execute-sql', methods=['POST'])
 def execute_sql():
     """Execute SQL query and return results"""
@@ -122,10 +139,13 @@ def execute_sql():
         # Get all rows
         rows = cursor.fetchall()
 
-        # Convert to list of dictionaries
+        # Convert to list of dictionaries with JSON-safe values
         results = []
         for row in rows:
-            results.append(dict(zip(columns, row)))
+            row_dict = {}
+            for col, val in zip(columns, row):
+                row_dict[col] = serialize_value(val)
+            results.append(row_dict)
 
         conn.close()
 
